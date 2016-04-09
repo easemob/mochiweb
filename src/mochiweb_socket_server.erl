@@ -29,7 +29,9 @@
          ssl=false,
          ssl_opts=[{ssl_imp, new}],
          acceptor_pool=sets:new(),
-         profile_fun=undefined}).
+         profile_fun=undefined,
+         other_options = []
+        }).
 
 -define(is_old_state(State), not is_record(State, mochiweb_socket_server)).
 
@@ -128,7 +130,7 @@ parse_options([{recbuf, RecBuf} | Rest], State) when is_integer(RecBuf) orelse
     %% and this doubled value is returned by getsockopt(2).
     %%
     %% See: man 7 socket | grep SO_RCVBUF
-    %% 
+    %%
     %% In case undefined is passed instead of the default buffer
     %% size ?RECBUF_SIZE, no size is set and the OS can control it dynamically
     parse_options(Rest, State#mochiweb_socket_server{recbuf=RecBuf});
@@ -145,7 +147,9 @@ parse_options([{ssl_opts, SslOpts} | Rest], State) when is_list(SslOpts) ->
     SslOpts1 = [{ssl_imp, new} | proplists:delete(ssl_imp, SslOpts)],
     parse_options(Rest, State#mochiweb_socket_server{ssl_opts=SslOpts1});
 parse_options([{profile_fun, ProfileFun} | Rest], State) when is_function(ProfileFun) ->
-    parse_options(Rest, State#mochiweb_socket_server{profile_fun=ProfileFun}).
+    parse_options(Rest, State#mochiweb_socket_server{profile_fun=ProfileFun});
+parse_options([{other_options, Opts} | Rest], State) ->
+    parse_options(Rest, State#mochiweb_socket_server{other_options= Opts}).
 
 
 start_server(F, State=#mochiweb_socket_server{ssl=Ssl, name=Name}) ->
@@ -179,7 +183,9 @@ ipv6_supported() ->
     end.
 
 init(State=#mochiweb_socket_server{ip=Ip, port=Port, backlog=Backlog,
-                                   nodelay=NoDelay, recbuf=RecBuf}) ->
+                                   nodelay=NoDelay, recbuf=RecBuf,
+                                   other_options = OtherOptions
+                                  }) ->
     process_flag(trap_exit, true),
 
     BaseOpts = [binary,
@@ -188,7 +194,8 @@ init(State=#mochiweb_socket_server{ip=Ip, port=Port, backlog=Backlog,
                 {backlog, Backlog},
                 {exit_on_close, false},
                 {active, false},
-                {nodelay, NoDelay}],
+                {nodelay, NoDelay}
+               ] ++ OtherOptions,
     Opts = case Ip of
         any ->
             case ipv6_supported() of % IPv4, and IPv6 if supported
@@ -200,7 +207,7 @@ init(State=#mochiweb_socket_server{ip=Ip, port=Port, backlog=Backlog,
         {_, _, _, _, _, _, _, _} -> % IPv6
             [inet6, {ip, Ip} | BaseOpts]
     end,
-    OptsBuf=case RecBuf of 
+    OptsBuf=case RecBuf of
         undefined ->
             Opts;
         _ ->
